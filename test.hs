@@ -7,17 +7,18 @@ data Parser a = Parser { p :: Char -> Parser a -> (Maybe a, Parser a) }
 data Automata = AInt Int
   deriving Show
 
-csi :: Parser Automata
-csi = Parser func
+char :: Char -> Parser Automata -> Parser Automata
+char c next = Parser func
   where
-    func 'e' _ = (Nothing, csi')
-    func _ i = (Nothing, i)
+    func c' i
+      | c == c' = (Nothing, next)
+      | otherwise = (Nothing, i)
+
+csi :: Parser Automata
+csi = char 'e' csi'
 
 csi' :: Parser Automata
-csi' = Parser func
-  where
-    func '[' i = (Nothing, num 0)
-    func _ i = (Nothing, i)
+csi' = char '[' (num 0)
 
 num :: Int -> Parser Automata
 num acc = Parser func
