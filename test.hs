@@ -2,7 +2,12 @@ module Main where
 
 import Data.Char (digitToInt)
 
-data Parser a = Parser { p :: Char -> Parser a -> (Maybe a, Parser a) }
+data Parser a = Parser
+  { p ::
+      Char -> -- Input character
+      Parser a -> -- Initial Parser
+      (Maybe a, Parser a)
+  }
 
 data Automata = AInt Int
   deriving Show
@@ -14,11 +19,16 @@ char c next = Parser func
       | c == c' = (Nothing, next)
       | otherwise = (Nothing, i)
 
-csi :: Parser Automata
-csi = char 'e' csi'
+string :: String -> Parser Automata -> Parser Automata
+string (c:cs) next = Parser func
+  where
+    func c' i
+      | c == c' = (Nothing, string cs next)
+      | otherwise = (Nothing, i)
+string [] next = next
 
-csi' :: Parser Automata
-csi' = char '[' (num 0)
+csi :: Parser Automata
+csi = string "e[" (num 0)
 
 num :: Int -> Parser Automata
 num acc = Parser func
