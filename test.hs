@@ -1,55 +1,52 @@
+{-# LANGUAGE RankNTypes #-}
+
 module Main where
 
-import Data.Char (digitToInt)
+type Success a r = a -> PRes r
 
 data Parser a = Parser
-  { p ::
+  { p :: forall r.
       Char -> -- Input character
-      Parser a -> -- Initial Parser
-      (Maybe a, Parser a)
+      Success a r ->
+      PRes r
   }
 
-data Automata = AInt Int
+data PRes a = Finished a | Running | Failed
   deriving Show
 
-char :: Char -> Parser Automata -> Parser Automata
-char c next = Parser func
-  where
-    func c' i
-      | c == c' = (Nothing, next)
-      | otherwise = (Nothing, i)
+data Automata = AInt Int | AString String
+  deriving Show
 
-string :: String -> Parser Automata -> Parser Automata
-string (c:cs) next = Parser func
-  where
-    func c' i
-      | c == c' = (Nothing, string cs next)
-      | otherwise = (Nothing, i)
-string [] next = next
+successK :: Success a a
+successK a = Finished a
 
-csi :: Parser Automata
-csi = string "e[" (num 0)
+instance Functor Parser where
+  fmap f (Parser parser) = Parser $ \c succ' ->
+    parser c (succ' . f)
 
-num :: Int -> Parser Automata
-num acc = Parser func
-  where
-    func c i
-      | c >= '0' && c <= '9' = (Nothing, num (acc * 10 + digitToInt c))
-      | otherwise = p (finalize acc) c i
+instance Applicative Parser where
+  pure x = Parser $ \_ succ' -> succ' x
+  (Parser a) <*> (Parser b) = Parser $ \c succ' ->
+    b c (\x -> a '_' (\f -> succ' (f x)))
 
-finalize :: Int -> Parser Automata
-finalize acc = Parser func
+char :: Char -> Parser Char
+char c = Parser func
   where
-    func 'R' i = (Just $ AInt acc, i)
-    func _ i = (Nothing, i)
+    func c' succ'
+      | c == c' = succ' c
+      | otherwise = Failed
+
+initP :: Parser Automata
+initP = (two <$> char 'x') <*> char 'y'
+  where
+    two x y = AString [x, y]
+
 
 main :: IO ()
 main = do
-    loop initParser
+    loop initP
   where
-    initParser = csi
     loop parser = do
       x <- getChar
-      let (res, next) = p parser x initParser
+      let res = (p parser) x successK
       print res
-      loop next
