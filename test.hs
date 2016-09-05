@@ -2,44 +2,46 @@
 
 module Main where
 
-type Success a r = a -> PRes r
-
 data Parser a = Parser
-  { p :: forall r.
+  { p ::
       Char -> -- Input character
-      Success a r ->
-      PRes r
+      (Consume, Maybe a, Maybe (Parser a))
   }
 
-data PRes a = Finished a | Running | Failed
+data Consume = Consumed | Skipped
+
+data PRes a = Finished a | Running
   deriving Show
 
 data Automata = AInt Int | AString String
   deriving Show
 
-successK :: Success a a
-successK a = Finished a
-
 instance Functor Parser where
-  fmap f (Parser parser) = Parser $ \c succ' ->
-    parser c (succ' . f)
+  fmap f (Parser parser) = Parser $ \c ->
+    let (cs, re, _) = parser c
+    in (cs, f <$> re, Nothing)
 
 instance Applicative Parser where
-  pure x = Parser $ \_ succ' -> succ' x
-  (Parser a) <*> (Parser b) = Parser $ \c succ' ->
-    b c (\x -> a '_' (\f -> succ' (f x)))
+  pure f = Parser $ \_ -> (Skipped, Just f, Nothing)
+  (Parser a) <*> (Parser b) = Parser $ \c ->
+    let (as, ar, _) = a c
+        (bs, br, _) = b c
+        next = Parser $ \c' -> let (bs', br', _) = b c' in (bs', ar <*> br', Nothing)
+    in case as of
+        Skipped -> (bs, ar <*> br, Nothing)
+        Consumed -> (as, undefined, Just next)
 
 char :: Char -> Parser Char
 char c = Parser func
   where
-    func c' succ'
-      | c == c' = succ' c
-      | otherwise = Failed
+    func c'
+      | c == c' = (Consumed, Just c, Nothing)
+      | otherwise = (Skipped, Nothing, Nothing)
 
 initP :: Parser Automata
-initP = (two <$> char 'x') <*> char 'y'
+initP = pure one <*> char 'x'
   where
-    two x y = AString [x, y]
+    one x = AString [x]
 
 
 main :: IO ()
@@ -48,5 +50,8 @@ main = do
   where
     loop parser = do
       x <- getChar
-      let res = (p parser) x successK
+      let (_, res, nextP) = (p parser) x
       print res
+      loop $ case nextP of
+          Just next -> next
+          Nothing -> initP
